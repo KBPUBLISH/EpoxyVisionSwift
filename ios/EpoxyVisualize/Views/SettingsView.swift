@@ -80,13 +80,21 @@ struct SettingsView: View {
                     pinError = false
                 }
                 Button("Enter") {
-                    if pinInput == storage.getAdminPIN() {
-                        pinInput = ""
-                        pinError = false
-                        showAdminPanel = true
-                    } else {
-                        pinError = true
-                        pinInput = ""
+                    Task { @MainActor in
+                        let valid: Bool
+                        if AdminApiService.hasApi {
+                            valid = await AdminApiService.verifyAdminPin(pinInput)
+                        } else {
+                            valid = pinInput == storage.getAdminPIN()
+                        }
+                        if valid {
+                            pinInput = ""
+                            pinError = false
+                            showAdminPanel = true
+                        } else {
+                            pinError = true
+                            pinInput = ""
+                        }
                     }
                 }
             } message: {

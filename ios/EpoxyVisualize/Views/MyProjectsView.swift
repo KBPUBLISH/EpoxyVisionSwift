@@ -1,4 +1,5 @@
 import SwiftUI
+import MessageUI
 
 struct MyProjectsView: View {
     @Environment(StorageService.self) private var storage
@@ -112,6 +113,8 @@ struct ProjectDetailSheet: View {
     @State private var squareFootageText: String = ""
     @State private var estimate: QuoteBreakdown?
     @State private var showShareSheet = false
+    @State private var showRequestQuoteMail = false
+    @State private var showMailUnavailableAlert = false
 
     private var squareFootage: Double {
         Double(squareFootageText) ?? 0
@@ -167,6 +170,21 @@ struct ProjectDetailSheet: View {
                 if let estimate {
                     ShareSheet(items: [buildEstimateText(estimate)])
                 }
+            }
+            .sheet(isPresented: $showRequestQuoteMail) {
+                if let estimate {
+                    RequestQuoteMailSheet(
+                        project: project,
+                        estimate: estimate,
+                        squareFootage: squareFootage,
+                        onDismiss: { showRequestQuoteMail = false }
+                    )
+                }
+            }
+            .alert("Mail Unavailable", isPresented: $showMailUnavailableAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Please configure Mail in Settings to request a quote.")
             }
             .onAppear {
                 if let sqft = project.squareFootage {
@@ -366,9 +384,15 @@ struct ProjectDetailSheet: View {
 
             HStack(spacing: 12) {
                 Button {
-                    showShareSheet = true
+                    if MFMailComposeViewController.canSendMail(), let estimate {
+                        showRequestQuoteMail = true
+                    } else if let estimate, let url = mailtoURL(estimate: estimate) {
+                        UIApplication.shared.open(url)
+                    } else {
+                        showMailUnavailableAlert = true
+                    }
                 } label: {
-                    Label("Send to Client", systemImage: "paperplane.fill")
+                    Label("Request Quote", systemImage: "envelope.fill")
                         .font(.subheadline.bold())
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -454,6 +478,14 @@ struct ProjectDetailSheet: View {
         .tint(.red)
     }
 
+    private func mailtoURL(estimate: QuoteBreakdown) -> URL? {
+        let subject = "Quote Request - \(project.styleName) - \(Int(squareFootage)) sq ft"
+        let body = buildEstimateText(estimate)
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        let subjectEncoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return URL(string: "mailto:calgary@chemtecresinsupply.com?subject=\(subjectEncoded)&body=\(body ?? "")")
+    }
+
     private func buildEstimateText(_ estimate: QuoteBreakdown) -> String {
         """
         CRS FLOORS — Project Estimate
@@ -470,6 +502,65 @@ struct ProjectDetailSheet: View {
         
         Powered by CRS
         """
+    }
+}
+
+// MARK: - Request Quote Mail
+private struct RequestQuoteMailSheet: UIViewControllerRepresentable {
+    let project: EpoxyProject
+    let estimate: QuoteBreakdown
+    let squareFootage: Double
+    let onDismiss: () -> Void
+
+    func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        let vc = MFMailComposeViewController()
+        vc.mailComposeDelegate = context.coordinator
+        vc.setToRecipients(["calgary@chemtecresinsupply.com"])
+        vc.setSubject("Quote Request - \(project.styleName) - \(Int(squareFootage)) sq ft")
+        vc.setMessageBody(requestQuoteBody, isHTML: false)
+        if let imageData = project.generatedImageData1 {
+            vc.addAttachmentData(imageData, mimeType: "image/jpeg", fileName: "\(project.styleName.replacingOccurrences(of: " ", with: "_")).jpg")
+        }
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismiss: onDismiss)
+    }
+
+    private var requestQuoteBody: String {
+        """
+        CRS FLOORS — Quote Request
+        
+        Project: \(project.styleName)
+        Type: \(project.epoxyType.rawValue)
+        Area: \(Int(squareFootage)) sq ft
+        
+        Materials: \(estimate.materialCost.formatted(.currency(code: "USD")))
+        Material Upcharge: \(estimate.materialUpcharge.formatted(.currency(code: "USD")))
+        Labor: \(estimate.laborCost.formatted(.currency(code: "USD")))
+        
+        ESTIMATED TOTAL: \(estimate.total.formatted(.currency(code: "USD")))
+        
+        (Project image attached)
+        
+        Powered by CRS
+        """
+    }
+
+    class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let onDismiss: () -> Void
+
+        init(onDismiss: @escaping () -> Void) {
+            self.onDismiss = onDismiss
+        }
+
+        func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            controller.dismiss(animated: true)
+            onDismiss()
+        }
     }
 }
 

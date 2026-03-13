@@ -140,16 +140,37 @@ struct AdminPanelView: View {
             minimumJobPrice: Double(minimumJob) ?? 1500.0,
             materialUpchargePercent: Double(upchargePercent) ?? 15.0
         )
-        storage.saveAdminSettings(settings)
 
-        if !newPIN.isEmpty && newPIN.count >= 4 {
-            storage.setAdminPIN(newPIN)
+        if AdminApiService.hasApi {
+            Task { @MainActor in
+                let ok = await AdminApiService.saveAdminSettings(
+                    currentPIN: storage.getAdminPIN(),
+                    newPIN: newPIN.count >= 4 ? newPIN : nil,
+                    settings: settings
+                )
+                if ok {
+                    storage.adminSettings = settings
+                    if !newPIN.isEmpty && newPIN.count >= 4 {
+                        storage.setAdminPIN(newPIN)
+                    }
+                    showSavedAndDismiss()
+                } else {
+                    showSavedAndDismiss()
+                }
+            }
+        } else {
+            storage.saveAdminSettings(settings)
+            if !newPIN.isEmpty && newPIN.count >= 4 {
+                storage.setAdminPIN(newPIN)
+            }
+            showSavedAndDismiss()
         }
+    }
 
+    private func showSavedAndDismiss() {
         withAnimation(.spring(duration: 0.3)) {
             showSaved = true
         }
-
         Task {
             try? await Task.sleep(for: .seconds(2))
             withAnimation {

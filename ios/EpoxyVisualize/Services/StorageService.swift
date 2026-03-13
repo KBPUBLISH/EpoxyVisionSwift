@@ -12,7 +12,13 @@ class StorageService {
 
     init() {
         loadProjects()
-        loadAdminSettings()
+        if AdminApiService.hasApi {
+            Task { @MainActor in
+                adminSettings = await AdminApiService.fetchAdminSettings()
+            }
+        } else {
+            loadAdminSettings()
+        }
     }
 
     func saveProject(_ project: EpoxyProject) {
@@ -31,8 +37,10 @@ class StorageService {
 
     func saveAdminSettings(_ settings: AdminSettings) {
         adminSettings = settings
-        if let data = try? JSONEncoder().encode(settings) {
-            UserDefaults.standard.set(data, forKey: adminKey)
+        if !AdminApiService.hasApi {
+            if let data = try? JSONEncoder().encode(settings) {
+                UserDefaults.standard.set(data, forKey: adminKey)
+            }
         }
     }
 
@@ -42,6 +50,12 @@ class StorageService {
 
     func setAdminPIN(_ pin: String) {
         UserDefaults.standard.set(pin, forKey: pinKey)
+    }
+
+    func refreshAdminSettingsFromAPI() async {
+        guard AdminApiService.hasApi else { return }
+        let s = await AdminApiService.fetchAdminSettings()
+        await MainActor.run { adminSettings = s }
     }
 
     private func loadProjects() {
