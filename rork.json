@@ -1,0 +1,9 @@
+{
+  "apps": [
+    {
+      "name": "Epoxy Visualize",
+      "path": "ios",
+      "framework": "swift"
+    }
+  ]
+}
