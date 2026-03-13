@@ -1,6 +1,12 @@
-node_modules
+# Swift/iOS project — no web frontend in this repo
 .env
-.expo
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
 
 # macOS
 .DS_Store
