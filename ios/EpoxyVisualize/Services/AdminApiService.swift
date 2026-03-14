@@ -88,4 +88,33 @@ enum AdminApiService {
     private struct VerifyResponse: Decodable {
         let valid: Bool
     }
+
+    // MARK: - Reference Images (public, for installer app)
+
+    struct ReferenceItem: Decodable {
+        let id: String
+        let name: String
+        let url: String?
+    }
+
+    struct ReferenceImagesResponse: Decodable {
+        let flake: [ReferenceItem]?
+        let quartz: [ReferenceItem]?
+        let metallic: [ReferenceItem]?
+        let solid: [ReferenceItem]?
+    }
+
+    /// Fetches reference gallery from backend (Flakes, Quartz, Metallic, Solid).
+    static func fetchReferenceImages() async -> ReferenceImagesResponse {
+        guard let url = apiURL("api/reference-images") else {
+            return ReferenceImagesResponse(flake: nil, quartz: nil, metallic: nil, solid: nil)
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decoded = try JSONDecoder().decode(ReferenceImagesResponse.self, from: data)
+            return decoded
+        } catch {
+            return ReferenceImagesResponse(flake: nil, quartz: nil, metallic: nil, solid: nil)
+        }
+    }
 }

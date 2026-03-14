@@ -6,10 +6,41 @@ struct SettingsView: View {
     @State private var showAdminPanel = false
     @State private var pinInput = ""
     @State private var pinError = false
+    @State private var apiURLString: String = AdminApiService.baseURL ?? ""
+    @State private var showReferenceGallery = false
 
     var body: some View {
         NavigationStack {
             List {
+                Section("Backend API") {
+                    HStack {
+                        Image(systemName: "server.rack")
+                            .foregroundStyle(AppTheme.brandRed)
+                        TextField("API URL (e.g. http://localhost:3001)", text: $apiURLString)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onSubmit {
+                                let trimmed = apiURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+                                AdminApiService.setBaseURL(trimmed.isEmpty ? nil : trimmed)
+                            }
+                    }
+                    .listRowBackground(AppTheme.surfaceCard)
+                    .onChange(of: apiURLString) { _, newValue in
+                        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        AdminApiService.setBaseURL(trimmed.isEmpty ? nil : trimmed)
+                    }
+
+                    if AdminApiService.hasApi {
+                        Button {
+                            showReferenceGallery = true
+                        } label: {
+                            Label("View Reference Gallery", systemImage: "photo.on.rectangle.angled")
+                                .foregroundStyle(AppTheme.brandRed)
+                        }
+                        .listRowBackground(AppTheme.surfaceCard)
+                    }
+                }
+
                 Section {
                     HStack(spacing: 16) {
                         ZStack {
@@ -106,6 +137,12 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showAdminPanel) {
                 AdminPanelView()
+            }
+            .sheet(isPresented: $showReferenceGallery) {
+                ReferenceGalleryView()
+            }
+            .onAppear {
+                apiURLString = AdminApiService.baseURL ?? ""
             }
         }
     }

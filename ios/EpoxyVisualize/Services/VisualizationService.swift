@@ -9,8 +9,6 @@ class VisualizationService {
     var generatedImage2: UIImage?
     var errorMessage: String?
 
-    private let editURL = "https://toolkit.rork.com/images/edit/"
-
     func generateVisualization(originalImage: UIImage, epoxyType: EpoxyType, styleName: String) async {
         isGenerating = true
         generatedImage1 = nil
@@ -24,18 +22,16 @@ class VisualizationService {
         }
 
         let base64 = imageData.base64EncodedString()
-        let prompt = buildPrompt(epoxyType: epoxyType, styleName: styleName)
 
-        async let result1 = callEditAPI(base64: base64, prompt: prompt + " Variation 1: slightly different angle of light reflection.")
-        async let result2 = callEditAPI(base64: base64, prompt: prompt + " Variation 2: slightly different ambient lighting conditions.")
-
-        let (img1, img2) = await (result1, result2)
-
-        if let img1 {
-            generatedImage1 = img1
-        }
-        if let img2 {
-            generatedImage2 = img2
+        if AdminApiService.hasApi {
+            await callBackendVisualize(base64: base64, epoxyType: epoxyType, styleName: styleName)
+        } else {
+            let prompt = buildPrompt(epoxyType: epoxyType, styleName: styleName)
+            async let result1 = callRorkAPI(base64: base64, prompt: prompt + " Variation 1: slightly different angle of light reflection.")
+            async let result2 = callRorkAPI(base64: base64, prompt: prompt + " Variation 2: slightly different ambient lighting conditions.")
+            let (img1, img2) = await (result1, result2)
+            if let img1 { generatedImage1 = img1 }
+            if let img2 { generatedImage2 = img2 }
         }
 
         if generatedImage1 == nil && generatedImage2 == nil {
@@ -43,6 +39,64 @@ class VisualizationService {
         }
 
         isGenerating = false
+    }
+
+    private func epoxyTypeApiValue(_ type: EpoxyType) -> String {
+        switch type {
+        case .flake: return "flake"
+        case .metallic: return "metallic"
+        case .quartz: return "quartz"
+        case .solidColor: return "solid"
+        }
+    }
+
+    private func callBackendVisualize(base64: String, epoxyType: EpoxyType, styleName: String) async {
+        guard let url = AdminApiService.apiURL("api/visualize") else {
+            errorMessage = "API URL not configured"
+            return
+        }
+        let photoBase64 = "data:image/jpeg;base64,\(base64)"
+        let body: [String: Any] = [
+            "photo": photoBase64,
+            "epoxyType": epoxyTypeApiValue(epoxyType),
+            "colorOrBlend": styleName
+        ]
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = httpBody
+        request.timeoutInterval = 120
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+            if httpResponse.statusCode != 200 {
+                errorMessage = "Server error (\(httpResponse.statusCode))"
+                return
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let afterVal = json["after"] else {
+                errorMessage = "Invalid response"
+                return
+            }
+            // after can be base64 data URL or signed GCS URL
+            if let urlString = afterVal as? String {
+                if urlString.hasPrefix("data:image") {
+                    let b64 = urlString.components(separatedBy: ",").last ?? ""
+                    if let imgData = Data(base64Encoded: b64), let img = UIImage(data: imgData) {
+                        generatedImage1 = img
+                    }
+                } else if let url = URL(string: urlString),
+                          let imgData = try? Data(contentsOf: url),
+                          let img = UIImage(data: imgData) {
+                    generatedImage1 = img
+                }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func buildPrompt(epoxyType: EpoxyType, styleName: String) -> String {
@@ -59,7 +113,7 @@ class VisualizationService {
         }
     }
 
-    private nonisolated func callEditAPI(base64: String, prompt: String) async -> UIImage? {
+    private nonisolated func callRorkAPI(base64: String, prompt: String) async -> UIImage? {
         guard let url = URL(string: "https://toolkit.rork.com/images/edit/") else { return nil }
 
         var request = URLRequest(url: url)
