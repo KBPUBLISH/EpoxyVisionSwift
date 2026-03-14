@@ -47,7 +47,7 @@ struct AdminSettings: Codable, Sendable {
     }
 }
 
-nonisolated struct QuoteBreakdown: Sendable {
+struct QuoteBreakdown: Sendable {
     let squareFootage: Double
     let epoxyType: EpoxyType
     let materialCost: Double

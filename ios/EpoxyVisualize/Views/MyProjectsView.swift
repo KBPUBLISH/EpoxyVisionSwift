@@ -384,9 +384,9 @@ struct ProjectDetailSheet: View {
 
             HStack(spacing: 12) {
                 Button {
-                    if MFMailComposeViewController.canSendMail(), let estimate {
+                    if MFMailComposeViewController.canSendMail() {
                         showRequestQuoteMail = true
-                    } else if let estimate, let url = mailtoURL(estimate: estimate) {
+                    } else if let url = mailtoURL(estimate: estimate) {
                         UIApplication.shared.open(url)
                     } else {
                         showMailUnavailableAlert = true
